@@ -1,0 +1,14 @@
+{
+  "version": 8,
+  "name": "SkyRouteMaps Offline",
+  "sources": {},
+  "layers": [
+    {
+      "id": "background",
+      "type": "background",
+      "paint": {
+        "background-color": "#101722"
+      }
+    }
+  ]
+}
