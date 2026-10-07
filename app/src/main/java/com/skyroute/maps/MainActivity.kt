@@ -10,15 +10,26 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
+import com.maplibre.android.MapLibre
+import com.maplibre.android.geometry.LatLng
+import com.maplibre.android.maps.MapView
+import com.maplibre.android.maps.MapLibreMap
+import com.maplibre.android.maps.Style
+import com.maplibre.android.location.LocationComponentActivationOptions
+import com.maplibre.android.location.modes.CameraMode
+import com.maplibre.android.location.modes.RenderMode
 
 class MainActivity : AppCompatActivity(), LocationListener {
 
+    private lateinit var mapView: MapView
     private lateinit var locationManager: LocationManager
 
     private lateinit var gpsStatus: TextView
     private lateinit var locationText: TextView
     private lateinit var accuracyText: TextView
     private lateinit var speedText: TextView
+
+    private var map: MapLibreMap? = null
 
     companion object {
         private const val LOCATION_PERMISSION_REQUEST = 1001
@@ -27,17 +38,83 @@ class MainActivity : AppCompatActivity(), LocationListener {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        MapLibre.getInstance(this)
+
         setContentView(R.layout.activity_main)
+
+        mapView = findViewById(R.id.mapView)
 
         gpsStatus = findViewById(R.id.gpsStatus)
         locationText = findViewById(R.id.locationText)
         accuracyText = findViewById(R.id.accuracyText)
         speedText = findViewById(R.id.speedText)
 
+        mapView.onCreate(savedInstanceState)
+
+        mapView.getMapAsync { mapLibreMap ->
+
+            map = mapLibreMap
+
+            mapLibreMap.setStyle(
+                Style.Builder()
+                    .fromUri("file:///android_asset/style.json")
+            ) {
+
+                enableLocationComponent(mapLibreMap)
+
+            }
+        }
+
         locationManager =
             getSystemService(LOCATION_SERVICE) as LocationManager
 
         requestLocationPermission()
+    }
+
+    private fun enableLocationComponent(
+        mapLibreMap: MapLibreMap
+    ) {
+
+        if (
+            ActivityCompat.checkSelfPermission(
+                this,
+                Manifest.permission.ACCESS_FINE_LOCATION
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            return
+        }
+
+        try {
+
+            val locationComponent =
+                mapLibreMap.locationComponent
+
+            val activationOptions =
+                LocationComponentActivationOptions
+                    .builder(this, mapLibreMap.style!!)
+                    .useDefaultLocationEngine(true)
+                    .build()
+
+            locationComponent.activateLocationComponent(
+                activationOptions
+            )
+
+            locationComponent.isLocationComponentEnabled = true
+
+            locationComponent.cameraMode =
+                CameraMode.TRACKING
+
+            locationComponent.renderMode =
+                RenderMode.COMPASS
+
+        } catch (e: Exception) {
+
+            Toast.makeText(
+                this,
+                "Map location component unavailable",
+                Toast.LENGTH_SHORT
+            ).show()
+        }
     }
 
     private fun requestLocationPermission() {
@@ -84,19 +161,13 @@ class MainActivity : AppCompatActivity(), LocationListener {
                 this
             )
 
-            gpsStatus.text = "● GPS searching..."
+            gpsStatus.text = "● GPS SEARCHING..."
             gpsStatus.setTextColor(0xFFFFC107.toInt())
 
         } catch (e: Exception) {
 
-            gpsStatus.text = "● GPS unavailable"
+            gpsStatus.text = "● GPS UNAVAILABLE"
             gpsStatus.setTextColor(0xFFFF5252.toInt())
-
-            Toast.makeText(
-                this,
-                "GPS could not be started",
-                Toast.LENGTH_LONG
-            ).show()
         }
     }
 
@@ -135,6 +206,17 @@ class MainActivity : AppCompatActivity(), LocationListener {
                 "Speed: %.1f km/h",
                 speedKmh
             )
+
+        map?.let { mapLibreMap ->
+
+            mapLibreMap.animateCamera(
+                com.maplibre.android.camera.CameraUpdateFactory
+                    .newLatLngZoom(
+                        LatLng(latitude, longitude),
+                        15.0
+                    )
+            )
+        }
     }
 
     override fun onRequestPermissionsResult(
@@ -158,34 +240,24 @@ class MainActivity : AppCompatActivity(), LocationListener {
 
                 startGPS()
 
+                map?.let {
+                    mapLibreMap ->
+                    mapLibreMap.getStyle {
+                        enableLocationComponent(mapLibreMap)
+                    }
+                }
+
             } else {
 
-                gpsStatus.text = "● Location permission denied"
-                gpsStatus.setTextColor(0xFFFF5252.toInt())
-
-                Toast.makeText(
-                    this,
-                    "Location permission is required",
-                    Toast.LENGTH_LONG
-                ).show()
+                gpsStatus.text =
+                    "● LOCATION PERMISSION DENIED"
             }
         }
     }
 
-    override fun onProviderEnabled(provider: String) {
+    override fun onProviderEnabled(provider: String) {}
 
-        if (provider == LocationManager.GPS_PROVIDER) {
-            gpsStatus.text = "● GPS enabled"
-        }
-    }
-
-    override fun onProviderDisabled(provider: String) {
-
-        if (provider == LocationManager.GPS_PROVIDER) {
-            gpsStatus.text = "● GPS disabled"
-            gpsStatus.setTextColor(0xFFFF5252.toInt())
-        }
-    }
+    override fun onProviderDisabled(provider: String) {}
 
     @Deprecated("Deprecated in Android API")
     override fun onStatusChanged(
@@ -195,9 +267,27 @@ class MainActivity : AppCompatActivity(), LocationListener {
     ) {
     }
 
-    override fun onDestroy() {
+    override fun onStart() {
+        super.onStart()
+        mapView.onStart()
+    }
 
-        super.onDestroy()
+    override fun onResume() {
+        super.onResume()
+        mapView.onResume()
+    }
+
+    override fun onPause() {
+        mapView.onPause()
+        super.onPause()
+    }
+
+    override fun onStop() {
+        mapView.onStop()
+        super.onStop()
+    }
+
+    override fun onDestroy() {
 
         if (
             ActivityCompat.checkSelfPermission(
@@ -205,7 +295,21 @@ class MainActivity : AppCompatActivity(), LocationListener {
                 Manifest.permission.ACCESS_FINE_LOCATION
             ) == PackageManager.PERMISSION_GRANTED
         ) {
+
             locationManager.removeUpdates(this)
         }
+
+        mapView.onDestroy()
+
+        super.onDestroy()
+    }
+
+    override fun onSaveInstanceState(
+        outState: Bundle
+    ) {
+
+        super.onSaveInstanceState(outState)
+
+        mapView.onSaveInstanceState(outState)
     }
 }
