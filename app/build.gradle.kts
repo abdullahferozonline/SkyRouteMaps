@@ -40,5 +40,5 @@ dependencies {
     implementation("androidx.appcompat:appcompat:1.7.1")
 
     // Offline map renderer
-    implementation("org.maplibre.gl:android-sdk:11.5.0")
+    implementation("org.maplibre.gl:android-sdk:11.6.0")
 }
